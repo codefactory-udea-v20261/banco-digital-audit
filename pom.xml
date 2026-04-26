@@ -134,6 +134,12 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-hateoas</artifactId>
     </dependency>
+    <!-- ── Cloud SQL Connector ───────────────────────────────── -->
+    <dependency>
+      <groupId>com.google.cloud.sql</groupId>
+      <artifactId>postgres-socket-factory</artifactId>
+      <version>1.15.1</version>
+    </dependency>
   </dependencies>
 
   <build>

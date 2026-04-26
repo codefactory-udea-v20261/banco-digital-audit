@@ -37,12 +37,17 @@ spring:
     default-property-inclusion: non_null
 
 server:
-  port: ${APP_PORT:8082}
+  port: ${PORT:${APP_PORT:8082}}
   servlet:
     context-path: /
   error:
     include-message: never
     include-stacktrace: never
+  shutdown: graceful
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 10
 
 management:
   endpoints:

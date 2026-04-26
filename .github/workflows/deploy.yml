@@ -1,0 +1,49 @@
+name: Deploy Audit to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  SERVICE_NAME: audit
+  IMAGE_NAME: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/banco-digital-repo/audit
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ secrets.GCP_REGION }}
+          image: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          flags: '--allow-unauthenticated --add-cloudsql-instances=${{ secrets.GCP_SQL_INSTANCE_NAME }}'
+          env_vars: |
+            APP_PROFILE=prod
+            SPRING_DATASOURCE_URL=jdbc:postgresql:///banco_digital_audit?cloudSqlInstance=${{ secrets.GCP_SQL_INSTANCE_NAME }}&socketFactory=com.google.cloud.sql.postgres.SocketFactory
+            SPRING_DATASOURCE_USERNAME=${{ secrets.DB_USERNAME }}
+            SPRING_DATASOURCE_PASSWORD=${{ secrets.DB_PASSWORD }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_EXPIRATION_MS=3600000

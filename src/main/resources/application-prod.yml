@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: jdbc:postgresql:///${DB_NAME:banco_digital_audit}?cloudSqlInstance=${CLOUD_SQL_INSTANCE}&socketFactory=com.google.cloud.sql.postgres.SocketFactory&user=${DB_USERNAME:postgres}&password=${DB_PASSWORD:admin}
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    root: WARN
+    com.udea.bancodigital: INFO
+
+server:
+  error:
+    include-message: never
+    include-stacktrace: never
