@@ -25,6 +25,7 @@
     <jjwt.version>0.12.5</jjwt.version>
     <testcontainers.version>1.19.7</testcontainers.version>
     <jacoco.version>0.8.11</jacoco.version>
+    <sonar.organization>codefactory-udea-v20261</sonar.organization>
   </properties>
 
   <dependencies>
