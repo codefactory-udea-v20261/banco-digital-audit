@@ -74,7 +74,7 @@ jobs:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
     needs: build-and-test
-    timeout-minutes: 15
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
@@ -97,7 +97,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: ./mvnw -B sonar:sonar -Dsonar.host.url=https://sonarcloud.io -Dsonar.projectKey=codefactory-udea-v20261_banco-digital-audit -Dsonar.organization=codefactory-udea-v20261
+        run: ./mvnw -B verify sonar:sonar -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=codefactory-udea-v20261 -Dsonar.projectKey=codefactory-udea-v20261_banco-digital-audit
 
   docker-build:
     name: Docker Build Check
