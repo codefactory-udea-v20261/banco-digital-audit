@@ -2,13 +2,16 @@ name: Deploy Audit to Cloud Run
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
+
+concurrency:
+  group: deploy-audit
+  cancel-in-progress: false
 
 env:
   SERVICE_NAME: audit
@@ -17,34 +20,71 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
+      - name: Validate required secrets
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          GCP_SQL_INSTANCE_NAME: ${{ secrets.GCP_SQL_INSTANCE_NAME }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          required=(
+            GCP_PROJECT_ID
+            GCP_REGION
+            GCP_SQL_INSTANCE_NAME
+            GCP_WORKLOAD_IDENTITY_PROVIDER
+            GCP_SERVICE_ACCOUNT
+            DB_USERNAME
+            DB_PASSWORD
+            JWT_SECRET
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name}" ]; then
+              echo "Missing secret: $name"
+              exit 1
+            fi
+          done
+
+      - name: Authenticate to Google Cloud (OIDC)
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: '${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}'
-          service_account: '${{ secrets.GCP_SERVICE_ACCOUNT }}'
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker
+      - name: Configure Docker auth
         run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
 
-      - name: Build and Push Docker Image
+      - name: Build and push Docker image
         run: |
-          docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
-          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker build -t "${{ env.IMAGE_NAME }}:${{ github.sha }}" .
+          docker push "${{ env.IMAGE_NAME }}:${{ github.sha }}"
 
       - name: Deploy to Cloud Run
+        id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE_NAME }}
           region: ${{ secrets.GCP_REGION }}
           image: ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          flags: '--allow-unauthenticated --add-cloudsql-instances=${{ secrets.GCP_SQL_INSTANCE_NAME }}'
+          env_vars_update_strategy: overwrite
+          flags: >-
+            --allow-unauthenticated
+            --add-cloudsql-instances=${{ secrets.GCP_SQL_INSTANCE_NAME }}
+            --memory=512Mi
+            --cpu=1
+            --timeout=600
           env_vars: |
             APP_PROFILE=prod
             SPRING_DATASOURCE_URL=jdbc:postgresql:///banco_digital_audit?cloudSqlInstance=${{ secrets.GCP_SQL_INSTANCE_NAME }}&socketFactory=com.google.cloud.sql.postgres.SocketFactory
@@ -52,3 +92,23 @@ jobs:
             SPRING_DATASOURCE_PASSWORD=${{ secrets.DB_PASSWORD }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
             JWT_EXPIRATION_MS=3600000
+
+      - name: Smoke test health endpoint
+        run: |
+          url="${{ steps.deploy.outputs.url }}"
+          if [ -z "$url" ]; then
+            echo "Deployment URL not found"
+            exit 1
+          fi
+
+          for i in 1 2 3 4 5; do
+            if curl -fsS "${url}/actuator/health" >/dev/null; then
+              echo "Health check OK: ${url}/actuator/health"
+              exit 0
+            fi
+            echo "Health check retry ${i}/5..."
+            sleep 10
+          done
+
+          echo "Health check failed for ${url}/actuator/health"
+          exit 1
