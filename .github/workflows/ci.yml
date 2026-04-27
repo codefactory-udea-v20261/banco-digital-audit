@@ -97,7 +97,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: ./mvnw -B sonar:sonar -Dsonar.projectKey=codefactory-udea-v20261_banco-digital-audit -Dsonar.organization=codefactory-udea-v20261
+        run: ./mvnw -B sonar:sonar -Dsonar.host.url=https://sonarcloud.io -Dsonar.projectKey=codefactory-udea-v20261_banco-digital-audit -Dsonar.organization=codefactory-udea-v20261
 
   docker-build:
     name: Docker Build Check
