@@ -1,0 +1,11 @@
+---
+# Docker Profile - No Vault, using environment variables
+spring:
+  config:
+    activate:
+      on-profile: docker
+  cloud:
+    vault:
+      enabled: false
+
+# Rest of configuration comes from environment variables or application.yml defaults

@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    # Local development - Audit user
+    username: audit_user
+    password: ${DB_PASSWORD:AuditService789!}
+  jpa:
+    show-sql: true
+
+logging:
+  level:
+    com.udea.bancodigital: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE

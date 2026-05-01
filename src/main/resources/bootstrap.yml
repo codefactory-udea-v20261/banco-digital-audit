@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: audit-service
+  cloud:
+    vault:
+      enabled: true
+      authentication: approle
+      app-role:
+        role-id: ${VAULT_ROLE_ID:00000000-0000-0000-0000-000000000000}
+        secret-id: ${VAULT_SECRET_ID:00000000-0000-0000-0000-000000000000}
+      host: ${VAULT_HOST:localhost}
+      port: ${VAULT_PORT:8200}
+      scheme: ${VAULT_SCHEME:http}
+      kv-version: 2
+      generic:
+        enabled: true
+        backend: secret
+      database:
+        enabled: true
+        backend: database
+        role: audit-user
+      tls:
+        enabled: false
+    config:
+      import: vault://

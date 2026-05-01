@@ -80,7 +80,6 @@ jobs:
           image: ${{ env.IMAGE_NAME }}:${{ github.sha }}
           env_vars_update_strategy: overwrite
           flags: >-
-            --allow-unauthenticated
             --add-cloudsql-instances=${{ secrets.GCP_SQL_INSTANCE_NAME }}
             --memory=512Mi
             --cpu=1
