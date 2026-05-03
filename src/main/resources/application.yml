@@ -51,9 +51,9 @@ eureka:
 
   # Kafka Configuration
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
     consumer:
-      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+      bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
       group-id: ${spring.application.name}
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
@@ -65,6 +65,16 @@ eureka:
       session-timeout-ms: ${KAFKA_SESSION_TIMEOUT_MS:30000}
       heartbeat-interval-ms: ${KAFKA_HEARTBEAT_INTERVAL_MS:10000}
       max-poll-interval-ms: ${KAFKA_MAX_POLL_INTERVAL_MS:300000}
+
+  cloud:
+    stream:
+      kafka:
+        binder:
+          brokers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+          zkNodes: zookeeper:2181
+          defaultBrokerPort: 9092
+          configuration:
+            bootstrap.servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
 
   # Distributed Tracing
   zipkin:
