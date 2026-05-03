@@ -36,18 +36,18 @@ spring:
       write-dates-as-timestamps: false
     default-property-inclusion: non_null
 
-  # Eureka Service Discovery
-  eureka:
-    client:
-      serviceUrl:
-        defaultZone: ${EUREKA_URL:http://eureka-server:8761/eureka/}
-      registerWithEureka: true
-      fetchRegistry: true
-    instance:
-      instanceId: ${spring.application.name}:${server.port}
-      preferIpAddress: true
-      leaseRenewalIntervalInSeconds: 30
-      leaseExpirationDurationInSeconds: 90
+# Eureka Service Discovery
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: ${EUREKA_URL:http://eureka-server:8761/eureka/}
+    registerWithEureka: true
+    fetchRegistry: true
+  instance:
+    instanceId: ${spring.application.name}:${server.port}
+    preferIpAddress: true
+    leaseRenewalIntervalInSeconds: 30
+    leaseExpirationDurationInSeconds: 90
 
   # Kafka Configuration
   kafka:
@@ -61,6 +61,10 @@ spring:
       enable-auto-commit: true
       properties:
         spring.json.trusted.packages: com.udea.bancodigital
+      # Consumer timeout configuration
+      session-timeout-ms: ${KAFKA_SESSION_TIMEOUT_MS:30000}
+      heartbeat-interval-ms: ${KAFKA_HEARTBEAT_INTERVAL_MS:10000}
+      max-poll-interval-ms: ${KAFKA_MAX_POLL_INTERVAL_MS:300000}
 
   # Distributed Tracing
   zipkin:

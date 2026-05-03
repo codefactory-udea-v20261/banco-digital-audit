@@ -32,9 +32,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 USER appuser
 
-ENTRYPOINT [ "java", \
-    "-XX:+UnlockExperimentalVMOptions", \
-    "-XX:+UseContainerSupport", \
-    "-XX:MaxRAMPercentage=75.0", \
-    "-Dspring.profiles.active=${APP_PROFILE}", \
-    "-jar", "app.jar" ]
+ENTRYPOINT [ "sh", "-c", "java -XX:+UnlockExperimentalVMOptions -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Dspring.profiles.active=${APP_PROFILE} -jar app.jar" ]

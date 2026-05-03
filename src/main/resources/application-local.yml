@@ -2,7 +2,15 @@ spring:
   datasource:
     # Local development - Audit user
     username: audit_user
-    password: ${DB_PASSWORD:AuditService789!}
+    password: ${AUDIT_DB_PASSWORD:AuditService789!}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+
+  cloud:
+    vault:
+      enabled: false
+
   jpa:
     show-sql: true
 
