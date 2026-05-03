@@ -1,18 +1,29 @@
 spring:
   datasource:
     # Local development - Audit user
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:banco_digital_audit}
     username: audit_user
     password: ${AUDIT_DB_PASSWORD:AuditService789!}
-
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
-
   cloud:
     vault:
       enabled: false
-
   jpa:
     show-sql: true
+
+spring.kafka:
+  bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+  consumer:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+
+spring.cloud.stream:
+  kafka:
+    binder:
+      brokers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
 
 logging:
   level:

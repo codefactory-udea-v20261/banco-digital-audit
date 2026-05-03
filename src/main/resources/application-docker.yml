@@ -7,5 +7,13 @@ spring:
   cloud:
     vault:
       enabled: false
+      config:
+        enabled: false
+    config:
+      enabled: false
 
-# Rest of configuration comes from environment variables or application.yml defaults
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
