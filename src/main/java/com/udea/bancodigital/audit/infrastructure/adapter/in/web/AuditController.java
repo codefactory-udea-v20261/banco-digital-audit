@@ -5,7 +5,6 @@ import com.udea.bancodigital.audit.infrastructure.repository.AuditEventRepositor
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -33,10 +32,8 @@ public class AuditController {
 
     @GetMapping("/{eventId}")
     @Operation(summary = "Get audit event by ID")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Event found"),
+        @ApiResponse(responseCode = "200", description = "Event found")
         @ApiResponse(responseCode = "404", description = "Event not found")
-    })
     public ResponseEntity<AuditEventEntity> getByEventId(
             @Parameter(description = "Event ID") @PathVariable String eventId) {
         return auditEventRepository.findByEventId(eventId)
@@ -46,9 +43,7 @@ public class AuditController {
 
     @GetMapping
     @Operation(summary = "Query audit events with filters")
-    @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Events returned")
-    })
     public ResponseEntity<Page<AuditEventEntity>> queryEvents(
             @Parameter(description = "Filter by event type") @RequestParam(required = false) String eventType,
             @Parameter(description = "Filter by aggregate ID") @RequestParam(required = false) String aggregateId,
