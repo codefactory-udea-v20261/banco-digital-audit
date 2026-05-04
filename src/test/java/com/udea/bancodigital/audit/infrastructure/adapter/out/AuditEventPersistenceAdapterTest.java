@@ -1,152 +1,125 @@
 package com.udea.bancodigital.audit.infrastructure.adapter.out;
 
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
-import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
-import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.udea.bancodigital.audit.infrastructure.entity.AuditEventEntity;
+import com.udea.bancodigital.audit.infrastructure.repository.AuditEventRepository;
 import org.junit.jupiter.api.DisplayName;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
 
-/**
- * Integration tests for Audit Event Persistence Adapter with Circuit Breaker.
- *
- * Tests resilience patterns:
- * 1. Happy path: event persisted successfully
- * 2. Circuit breaker opens after threshold failures
- * 3. Fallback queues event to Kafka when CB is open
- * 4. State transitions: CLOSED → OPEN → HALF_OPEN → CLOSED
- * 5. Retry logic with exponential backoff
- * 6. Exception handling
- */
-@Slf4j
-@SpringBootTest
-@ActiveProfiles("test")
-@DisplayName("Audit Event Persistence Adapter - Circuit Breaker Tests")
+@ExtendWith(MockitoExtension.class)
 class AuditEventPersistenceAdapterTest {
 
-    @Autowired
-    private AuditEventPersistenceAdapter auditEventPersistenceAdapter;
+    @InjectMocks
+    private AuditEventPersistenceAdapter adapter;
 
-    @Autowired
-    private CircuitBreakerRegistry circuitBreakerRegistry;
+    @Mock
+    private AuditEventRepository repository;
 
-    @Autowired(required = false)
+    @Mock
     private KafkaTemplate<String, Map<String, Object>> kafkaTemplate;
 
-    private CircuitBreaker auditCircuitBreaker;
-    private Map<String, Object> testEvent;
+    @Mock
+    private ObjectMapper objectMapper;
 
-    @BeforeEach
-    void setUp() {
-        try {
-            auditCircuitBreaker = circuitBreakerRegistry.circuitBreaker("audit-database");
-            auditCircuitBreaker.reset(); // Reset to CLOSED state
-        } catch (Exception e) {
-            log.warn("Circuit breaker not available in test context");
-        }
+    @Captor
+    private ArgumentCaptor<AuditEventEntity> entityCaptor;
 
-        testEvent = new HashMap<>();
-        testEvent.put("eventId", "evt-001");
-        testEvent.put("aggregateId", "cust-123");
-        testEvent.put("userId", "user-456");
-        testEvent.put("timestamp", System.currentTimeMillis());
+    @Captor
+    private ArgumentCaptor<Map<String, Object>> mapCaptor;
+
+    @Test
+    @DisplayName("Should persist event successfully")
+    void shouldPersistEvent() throws JsonProcessingException {
+        Map<String, Object> event = new HashMap<>();
+        event.put("eventId", "evt-123");
+        event.put("aggregateId", "agg-123");
+        
+        when(objectMapper.writeValueAsString(event)).thenReturn("{\"eventId\":\"evt-123\"}");
+
+        adapter.persistAuditEvent(event, "CustomerCreated");
+
+        verify(repository).save(entityCaptor.capture());
+        AuditEventEntity entity = entityCaptor.getValue();
+        assertThat(entity.getEventId()).isEqualTo("evt-123");
+        assertThat(entity.getEventType()).isEqualTo("CustomerCreated");
+        assertThat(entity.getPayload()).isEqualTo("{\"eventId\":\"evt-123\"}");
     }
 
     @Test
-    @DisplayName("Should persist audit event when database is healthy")
-    void testPersistEventSuccess() {
-        // Given: Database is healthy, circuit breaker is CLOSED
-        assertThat(auditCircuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+    @DisplayName("Should handle JSON serialization error")
+    void shouldHandleJsonError() throws JsonProcessingException {
+        Map<String, Object> event = new HashMap<>();
+        event.put("eventId", "evt-123");
 
-        // When: Persisting a valid audit event
-        auditEventPersistenceAdapter.persistAuditEvent(testEvent, "CustomerCreated");
+        when(objectMapper.writeValueAsString(event)).thenThrow(mock(JsonProcessingException.class));
 
-        // Then: No exception thrown, event persisted
-        assertThat(auditCircuitBreaker.getMetrics().getNumberOfSuccessfulCalls()).isGreaterThan(0);
-        log.info("✓ Event persisted successfully");
+        adapter.persistAuditEvent(event, "CustomerCreated");
+
+        verify(repository).save(entityCaptor.capture());
+        AuditEventEntity entity = entityCaptor.getValue();
+        assertThat(entity.getPayload()).isNull(); // Should be null on serialization failure
     }
 
     @Test
-    @DisplayName("Should return circuit breaker status")
-    void testGetCircuitBreakerStatus() {
-        // When: Getting adapter status
-        Map<String, Object> status = auditEventPersistenceAdapter.getStatus();
-
-        // Then: Status should include circuit breaker info
-        assertThat(status)
-            .containsKey("circuitBreakerName")
-            .containsKey("status");
-        assertThat(status.get("circuitBreakerName")).isEqualTo("audit-database");
-        log.info("✓ Circuit breaker status retrieved: {}", status);
+    @DisplayName("Should get adapter status")
+    void shouldGetStatus() {
+        Map<String, Object> status = adapter.getStatus();
+        assertThat(status).containsEntry("circuitBreakerName", "audit-database");
     }
 
     @Test
-    @DisplayName("Should handle null events gracefully")
-    void testNullEventHandling() {
-        // When: Attempting to persist null event
-        Map<String, Object> nullEvent = new HashMap<>();
-        nullEvent.put("eventId", null);
+    @DisplayName("Should execute fallback method directly via reflection to cover it")
+    void shouldExecuteFallback() throws Exception {
+        Map<String, Object> event = new HashMap<>();
+        event.put("eventId", "evt-123");
+        event.put("aggregateId", "agg-123");
 
-        // Then: Should complete without crashing
-        try {
-            auditEventPersistenceAdapter.persistAuditEvent(nullEvent, "CustomerCreated");
-            log.info("✓ Null event handled gracefully");
-        } catch (Exception e) {
-            log.info("✓ Exception caught as expected: {}", e.getMessage());
-        }
+        Exception exception = new RuntimeException("DB Connection Refused");
+
+        // Use reflection to invoke the private fallback method directly
+        ReflectionTestUtils.invokeMethod(adapter, "persistEventFallback", event, "CustomerCreated", exception);
+
+        verify(kafkaTemplate).send(eq("audit-events-pending"), eq("agg-123"), mapCaptor.capture());
+        
+        Map<String, Object> pendingEvent = mapCaptor.getValue();
+        assertThat(pendingEvent).containsEntry("eventType", "CustomerCreated");
+        assertThat(pendingEvent).containsEntry("originalEventId", "evt-123");
+        assertThat(pendingEvent).containsEntry("retryCount", 0);
+        assertThat(pendingEvent).containsEntry("reason", "Audit database unavailable");
     }
 
     @Test
-    @DisplayName("Should transition through circuit breaker states")
-    void testCircuitBreakerStateTransitions() {
-        // Given: Circuit breaker in CLOSED state
-        assertThat(auditCircuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
-        log.info("State 1: CLOSED (initial)");
+    @DisplayName("Should handle error gracefully inside fallback method")
+    void shouldHandleErrorInsideFallback() throws Exception {
+        Map<String, Object> event = new HashMap<>();
+        event.put("eventId", "evt-123");
+        event.put("aggregateId", "agg-123");
 
-        // When: CB is manipulated (simulated failure scenario)
-        // Note: In real tests, would simulate DB failures to trigger state change
-        // For now, verify the CB exists and is functional
+        Exception exception = new RuntimeException("DB Connection Refused");
 
-        // Then: Verify CB can transition (structure test)
-        assertThat(auditCircuitBreaker).isNotNull();
-        log.info("✓ Circuit breaker state transitions possible");
-    }
+        when(kafkaTemplate.send(any(), any(), any())).thenThrow(new RuntimeException("Kafka is down too"));
 
-    @Test
-    @DisplayName("Should include event metadata in audit entry")
-    void testAuditEventMetadata() {
-        // Given: Event with custom metadata
-        testEvent.put("customField", "customValue");
+        // Use reflection to invoke the private fallback method directly
+        ReflectionTestUtils.invokeMethod(adapter, "persistEventFallback", event, "CustomerCreated", exception);
 
-        // When: Persisting event
-        auditEventPersistenceAdapter.persistAuditEvent(testEvent, "TransactionCompleted");
-
-        // Then: Metadata should be included
-        assertThat(testEvent).containsKey("customField");
-        log.info("✓ Event metadata preserved: {}", testEvent);
-    }
-
-    @Test
-    @DisplayName("Should handle different event types")
-    void testMultipleEventTypes() {
-        // When: Persisting different event types
-        String[] eventTypes = {"CustomerCreated", "TransactionCompleted", "AccountOpened"};
-
-        // Then: All should be handled without error
-        for (String eventType : eventTypes) {
-            auditEventPersistenceAdapter.persistAuditEvent(testEvent, eventType);
-            assertThat(auditCircuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
-            log.info("✓ Event type handled: {}", eventType);
-        }
+        // Verify it was called, error caught and didn't crash
+        verify(kafkaTemplate).send(any(), any(), any());
     }
 }

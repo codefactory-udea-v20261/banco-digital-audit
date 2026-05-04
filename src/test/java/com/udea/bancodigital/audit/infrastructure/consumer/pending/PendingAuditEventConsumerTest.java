@@ -1,146 +1,96 @@
 package com.udea.bancodigital.audit.infrastructure.consumer.pending;
 
 import com.udea.bancodigital.audit.infrastructure.adapter.out.AuditEventPersistenceAdapter;
-import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.test.context.ActiveProfiles;
 
 import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
 
-/**
- * Integration tests for Pending Audit Event Consumer.
- * 
- * Tests retry logic and DLQ routing:
- * - Successful replay after recovery
- * - Exponential backoff retry logic
- * - DLQ routing after max retries
- */
-@Slf4j
-@SpringBootTest
-@ActiveProfiles("test")
-@DisplayName("Pending Audit Event Consumer Tests")
+@ExtendWith(MockitoExtension.class)
 class PendingAuditEventConsumerTest {
 
-    @Autowired
-    private PendingAuditEventConsumer pendingAuditEventConsumer;
+    @InjectMocks
+    private PendingAuditEventConsumer consumer;
 
-    @Autowired
-    private AuditEventPersistenceAdapter auditEventPersistenceAdapter;
+    @Mock
+    private AuditEventPersistenceAdapter adapter;
 
-    @Autowired(required = false)
+    @Mock
     private KafkaTemplate<String, Map<String, Object>> kafkaTemplate;
 
-    private Map<String, Object> testEvent;
+    @Captor
+    private ArgumentCaptor<Map<String, Object>> mapCaptor;
 
-    @BeforeEach
-    void setUp() {
-        testEvent = new HashMap<>();
-        testEvent.put("eventId", "evt-pending-001");
-        testEvent.put("aggregateId", "cust-789");
-        testEvent.put("eventType", "CustomerCreated");
-        testEvent.put("userId", "user-001");
-        testEvent.put("timestamp", System.currentTimeMillis());
-        testEvent.put("retryCount", 0);
+    @Test
+    @DisplayName("Should successfully replay event")
+    void shouldSuccessfullyReplay() {
+        Map<String, Object> event = new HashMap<>();
+        event.put("eventId", "evt-123");
+        event.put("eventType", "CustomerCreated");
+
+        consumer.consumePendingEvent(event);
+
+        verify(adapter).persistAuditEvent(event, "CustomerCreated");
+        verify(kafkaTemplate, never()).send(any(), any(), any());
     }
 
     @Test
-    @DisplayName("Should successfully replay event after retry")
-    void testSuccessfulReplay() {
-        // When: Consuming pending event
-        pendingAuditEventConsumer.consumePendingEvent(testEvent);
+    @DisplayName("Should retry with backoff when persistence fails and under max retries")
+    void shouldRetryWithBackoff() {
+        Map<String, Object> event = new HashMap<>();
+        event.put("eventId", "evt-123");
+        event.put("eventType", "CustomerCreated");
+        event.put("retryCount", 2);
 
-        // Then: Event should be processed (or retry queued if persistence fails)
-        assertThat(testEvent).containsEntry("eventId", "evt-pending-001");
-        log.info("✓ Event replay attempted");
+        doThrow(new RuntimeException("DB down")).when(adapter).persistAuditEvent(any(), any());
+
+        consumer.consumePendingEvent(event);
+
+        verify(kafkaTemplate).send(eq("audit-events-pending"), eq("evt-123"), mapCaptor.capture());
+        Map<String, Object> requeuedEvent = mapCaptor.getValue();
+        assertThat(requeuedEvent.get("retryCount")).isEqualTo(3);
+        assertThat(requeuedEvent).containsKey("nextRetryScheduledAt");
     }
 
     @Test
-    @DisplayName("Should increment retry count on failure")
-    void testRetryCountIncrement() {
-        // Given: Event with initial retry count
-        testEvent.put("retryCount", 0);
+    @DisplayName("Should move to DLQ when persistence fails and max retries reached")
+    void shouldMoveToDLQ() {
+        Map<String, Object> event = new HashMap<>();
+        event.put("eventId", "evt-123");
+        event.put("eventType", "CustomerCreated");
+        event.put("retryCount", 5);
 
-        // When: Processing event (will likely fail in test context without real DB)
-        // This simulates the retry logic being triggered
-        pendingAuditEventConsumer.consumePendingEvent(testEvent);
+        doThrow(new RuntimeException("DB down")).when(adapter).persistAuditEvent(any(), any());
 
-        // Then: Retry count should be tracked
-        assertThat(testEvent.get("eventId")).isNotNull();
-        log.info("✓ Retry count tracking verified");
+        consumer.consumePendingEvent(event);
+
+        verify(kafkaTemplate).send(eq("audit-events-dlq"), eq("evt-123"), mapCaptor.capture());
+        Map<String, Object> dlqEvent = mapCaptor.getValue();
+        assertThat(dlqEvent).containsKey("failureReason");
+        assertThat(dlqEvent).containsKey("movedToDLQAt");
     }
 
     @Test
-    @DisplayName("Should get consumer statistics")
-    void testGetConsumerStats() {
-        // When: Getting consumer stats
-        Map<String, Object> stats = pendingAuditEventConsumer.getStats();
+    @DisplayName("Should return consumer stats")
+    void shouldReturnConsumerStats() {
+        Map<String, Object> stats = consumer.getStats();
 
-        // Then: Stats should include topic and max retries
-        assertThat(stats)
-            .containsKey("topic")
-            .containsKey("dlqTopic")
-            .containsKey("maxRetries")
-            .containsKey("consumerGroup");
-        
         assertThat(stats).containsEntry("topic", "audit-events-pending");
         assertThat(stats).containsEntry("dlqTopic", "audit-events-dlq");
         assertThat(stats).containsEntry("maxRetries", 5);
-        
-        log.info("✓ Consumer stats: {}", stats);
-    }
-
-    @Test
-    @DisplayName("Should handle different event types")
-    void testMultipleEventTypes() {
-        // Given: Different event types
-        String[] eventTypes = {"CustomerCreated", "TransactionCompleted", "AccountOpened"};
-
-        // When: Processing each type
-        for (String eventType : eventTypes) {
-            testEvent.put("eventType", eventType);
-            pendingAuditEventConsumer.consumePendingEvent(testEvent);
-        }
-
-        // Then: All should be attempted
-        assertThat(testEvent.get("eventType")).isNotNull();
-        log.info("✓ Multiple event types handled");
-    }
-
-    @Test
-    @DisplayName("Should handle event with timestamp metadata")
-    void testEventTimestampMetadata() {
-        // Given: Event with timestamp
-        long beforeCall = System.currentTimeMillis();
-        testEvent.put("eventTimestamp", beforeCall);
-
-        // When: Processing
-        pendingAuditEventConsumer.consumePendingEvent(testEvent);
-
-        // Then: Timestamp should be preserved
-        assertThat(testEvent).containsEntry("eventTimestamp", beforeCall);
-        log.info("✓ Event timestamp preserved");
-    }
-
-    @Test
-    @DisplayName("Should preserve event aggregateId during replay")
-    void testAggregateIdPreservation() {
-        // Given: Event with aggregateId
-        String aggregateId = "cust-789";
-        testEvent.put("aggregateId", aggregateId);
-
-        // When: Processing
-        pendingAuditEventConsumer.consumePendingEvent(testEvent);
-
-        // Then: AggregateId should be preserved for correlation
-        assertThat(testEvent).containsEntry("aggregateId", aggregateId);
-        log.info("✓ AggregateId preserved: {}", aggregateId);
+        assertThat(stats).containsEntry("consumerGroup", "audit-pending");
     }
 }
