@@ -32,6 +32,10 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class PendingAuditEventConsumer {
 
+    private static final String EVENT_ID_KEY = EVENT_ID_KEY;
+    private static final String RETRY_COUNT_KEY = RETRY_COUNT_KEY;
+
+
     private static final String PENDING_TOPIC = "audit-events-pending";
     private static final String DLQ_TOPIC = "audit-events-dlq";
     private static final String CONSUMER_GROUP = "audit-pending";
@@ -50,9 +54,9 @@ public class PendingAuditEventConsumer {
     )
     public void consumePendingEvent(Map<String, Object> event) {
         try {
-            String eventId = String.valueOf(event.get("eventId"));
+            String eventId = String.valueOf(event.get(EVENT_ID_KEY));
             String eventType = String.valueOf(event.get("eventType"));
-            int retryCount = (int) event.getOrDefault("retryCount", 0);
+            int retryCount = (int) event.getOrDefault(RETRY_COUNT_KEY, 0);
 
             log.info("Processing pending audit event: "
                 + "eventId={}, type={}, retryCount={}/{}",
@@ -73,7 +77,7 @@ public class PendingAuditEventConsumer {
      * Handle retry logic with exponential backoff and DLQ routing.
      */
     private void handleRetry(Map<String, Object> event, Exception e) {
-        int retryCount = (int) event.getOrDefault("retryCount", 0);
+        int retryCount = (int) event.getOrDefault(RETRY_COUNT_KEY, 0);
 
         if (retryCount >= MAX_RETRIES) {
             // Max retries reached, move to DLQ
@@ -94,16 +98,16 @@ public class PendingAuditEventConsumer {
 
         log.warn("Retry failed for eventId={}. Scheduling retry {} of {}, "
             + "backoff={}ms",
-            event.get("eventId"), nextRetry, MAX_RETRIES, backoffMs);
+            event.get(EVENT_ID_KEY), nextRetry, MAX_RETRIES, backoffMs);
 
         // Update retry metadata
-        event.put("retryCount", nextRetry);
+        event.put(RETRY_COUNT_KEY, nextRetry);
         event.put("lastRetryAt", Instant.now().toString());
         event.put("nextRetryScheduledAt", 
             Instant.now().plusMillis(backoffMs).toString());
 
         // Re-queue to pending topic
-        kafkaTemplate.send(PENDING_TOPIC, String.valueOf(event.get("eventId")), event);
+        kafkaTemplate.send(PENDING_TOPIC, String.valueOf(event.get(EVENT_ID_KEY)), event);
     }
 
     /**
@@ -112,7 +116,7 @@ public class PendingAuditEventConsumer {
     private void moveToDLQ(Map<String, Object> event, String reason) {
         log.error("Moving audit event to DLQ. "
             + "eventId={}, reason={}",
-            event.get("eventId"), reason);
+            event.get(EVENT_ID_KEY), reason);
 
         // Add failure metadata
         event.put("failedAt", Instant.now().toString());
@@ -120,11 +124,11 @@ public class PendingAuditEventConsumer {
         event.put("movedToDLQAt", Instant.now().toString());
 
         // Send to DLQ
-        kafkaTemplate.send(DLQ_TOPIC, String.valueOf(event.get("eventId")), event);
+        kafkaTemplate.send(DLQ_TOPIC, String.valueOf(event.get(EVENT_ID_KEY)), event);
 
         log.info("Event moved to DLQ for investigation. "
             + "Topic={}, eventId={}",
-            DLQ_TOPIC, event.get("eventId"));
+            DLQ_TOPIC, event.get(EVENT_ID_KEY));
     }
 
     /**
