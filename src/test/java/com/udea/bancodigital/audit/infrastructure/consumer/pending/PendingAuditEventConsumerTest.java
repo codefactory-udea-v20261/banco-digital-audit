@@ -58,7 +58,7 @@ class PendingAuditEventConsumerTest {
         pendingAuditEventConsumer.consumePendingEvent(testEvent);
 
         // Then: Event should be processed (or retry queued if persistence fails)
-        assertThat(testEvent.get("eventId")).isEqualTo("evt-pending-001");
+        assertThat(testEvent).containsEntry("eventId", "evt-pending-001");
         log.info("✓ Event replay attempted");
     }
 
@@ -90,9 +90,9 @@ class PendingAuditEventConsumerTest {
             .containsKey("maxRetries")
             .containsKey("consumerGroup");
         
-        assertThat(stats.get("topic")).isEqualTo("audit-events-pending");
-        assertThat(stats.get("dlqTopic")).isEqualTo("audit-events-dlq");
-        assertThat(stats.get("maxRetries")).isEqualTo(5);
+        assertThat(stats).containsEntry("topic", "audit-events-pending");
+        assertThat(stats).containsEntry("dlqTopic", "audit-events-dlq");
+        assertThat(stats).containsEntry("maxRetries", 5);
         
         log.info("✓ Consumer stats: {}", stats);
     }
@@ -125,7 +125,7 @@ class PendingAuditEventConsumerTest {
         pendingAuditEventConsumer.consumePendingEvent(testEvent);
 
         // Then: Timestamp should be preserved
-        assertThat((Long) testEvent.get("eventTimestamp")).isEqualTo(beforeCall);
+        assertThat(testEvent).containsEntry("eventTimestamp", beforeCall);
         log.info("✓ Event timestamp preserved");
     }
 
@@ -140,7 +140,7 @@ class PendingAuditEventConsumerTest {
         pendingAuditEventConsumer.consumePendingEvent(testEvent);
 
         // Then: AggregateId should be preserved for correlation
-        assertThat(testEvent.get("aggregateId")).isEqualTo(aggregateId);
+        assertThat(testEvent).containsEntry("aggregateId", aggregateId);
         log.info("✓ AggregateId preserved: {}", aggregateId);
     }
 }
