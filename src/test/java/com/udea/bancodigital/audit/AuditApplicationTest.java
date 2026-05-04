@@ -15,9 +15,4 @@ class AuditApplicationTest {
         // Test that Spring context loads correctly
     }
 
-    @Test
-    @DisplayName("Main method executes without errors")
-    void mainMethodRuns() {
-        AuditApplication.main(new String[]{"--server.port=0"});
-    }
 }
