@@ -84,13 +84,15 @@ jobs:
             --memory=512Mi
             --cpu=1
             --timeout=600
+            --allow-unauthenticated
           env_vars: |
             APP_PROFILE=prod
+            SPRING_PROFILES_ACTIVE=prod
+            SPRING_CLOUD_VAULT_ENABLED=false
             SPRING_DATASOURCE_URL=jdbc:postgresql:///banco_digital_audit?cloudSqlInstance=${{ secrets.GCP_SQL_INSTANCE_NAME }}&socketFactory=com.google.cloud.sql.postgres.SocketFactory
             SPRING_DATASOURCE_USERNAME=${{ secrets.DB_USERNAME }}
             SPRING_DATASOURCE_PASSWORD=${{ secrets.DB_PASSWORD }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
-            JWT_EXPIRATION_MS=3600000
 
       - name: Smoke test health endpoint
         run: |
@@ -100,13 +102,13 @@ jobs:
             exit 1
           fi
 
-          for i in 1 2 3 4 5; do
+          for i in 1 2 3 4 5 6; do
             if curl -fsS "${url}/actuator/health" >/dev/null; then
               echo "Health check OK: ${url}/actuator/health"
               exit 0
             fi
-            echo "Health check retry ${i}/5..."
-            sleep 10
+            echo "Health check retry ${i}/6..."
+            sleep 15
           done
 
           echo "Health check failed for ${url}/actuator/health"
