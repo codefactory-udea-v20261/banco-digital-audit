@@ -4,14 +4,16 @@ spring:
       enabled: false
     config:
       enabled: false
-  autoconfigure:
-    exclude:
-      - org.springframework.cloud.netflix.eureka.EurekaClientAutoConfiguration
-      - org.springframework.cloud.netflix.eureka.EurekaDiscoveryClientConfiguration
-      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
-      - org.springframework.cloud.stream.binder.kafka.config.KafkaBinderConfiguration
+    discovery:
+      enabled: false
+    loadbalancer:
+      enabled: false
   jpa:
     show-sql: false
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
 
 # Disable Eureka for Cloud Run
 eureka:
@@ -31,12 +33,20 @@ spring.cloud.stream:
     binder:
       auto-startup: false
 
+management:
+  health:
+    kafka:
+      enabled: false
+    diskspace:
+      enabled: false
+
 logging:
   level:
     root: WARN
     com.udea.bancodigital: INFO
 
 server:
+  port: ${PORT:8080}
   error:
     include-message: never
     include-stacktrace: never
