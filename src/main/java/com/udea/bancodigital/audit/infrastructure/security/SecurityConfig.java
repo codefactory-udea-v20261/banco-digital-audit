@@ -31,7 +31,9 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
-            .csrf(AbstractHttpConfigurer::disable)
+            // CSRF protection is disabled because this is a stateless REST API using JWT tokens.
+            // JWT tokens are not vulnerable to CSRF attacks as they are sent in the Authorization header.
+            .csrf(AbstractHttpConfigurer::disable) // NOSONAR: java:S4502 - Stateless JWT API
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
