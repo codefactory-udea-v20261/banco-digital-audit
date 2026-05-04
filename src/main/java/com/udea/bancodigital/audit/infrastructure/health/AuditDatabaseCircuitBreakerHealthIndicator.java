@@ -11,6 +11,10 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class AuditDatabaseCircuitBreakerHealthIndicator implements HealthIndicator {
 
+    private static final String STATE_KEY = "state";
+    private static final String DESCRIPTION_KEY = "description";
+
+
     private final CircuitBreakerRegistry circuitBreakerRegistry;
 
     @Override
@@ -36,27 +40,27 @@ public class AuditDatabaseCircuitBreakerHealthIndicator implements HealthIndicat
         Health.Builder builder;
         if (state == CircuitBreaker.State.CLOSED) {
             builder = Health.up()
-                .withDetail("state", "CLOSED")
-                .withDetail("description", "Circuit breaker is healthy, calls passing through");
+                .withDetail(STATE_KEY, "CLOSED")
+                .withDetail(DESCRIPTION_KEY, "Circuit breaker is healthy, calls passing through");
         } else if (state == CircuitBreaker.State.OPEN) {
             builder = Health.outOfService()
-                .withDetail("state", "OPEN")
-                .withDetail("description", "Circuit breaker is OPEN, failing fast. Audit database is likely DOWN");
+                .withDetail(STATE_KEY, "OPEN")
+                .withDetail(DESCRIPTION_KEY, "Circuit breaker is OPEN, failing fast. Audit database is likely DOWN");
         } else if (state == CircuitBreaker.State.HALF_OPEN) {
             builder = Health.down()
-                .withDetail("state", "HALF_OPEN")
-                .withDetail("description", "Circuit breaker testing recovery, limited calls allowed");
+                .withDetail(STATE_KEY, "HALF_OPEN")
+                .withDetail(DESCRIPTION_KEY, "Circuit breaker testing recovery, limited calls allowed");
         } else if (state == CircuitBreaker.State.METRICS_ONLY) {
             builder = Health.up()
-                .withDetail("state", "METRICS_ONLY")
-                .withDetail("description", "Circuit breaker in metrics-only mode");
+                .withDetail(STATE_KEY, "METRICS_ONLY")
+                .withDetail(DESCRIPTION_KEY, "Circuit breaker in metrics-only mode");
         } else if (state == CircuitBreaker.State.DISABLED) {
             builder = Health.up()
-                .withDetail("state", "DISABLED")
-                .withDetail("description", "Circuit breaker is disabled");
+                .withDetail(STATE_KEY, "DISABLED")
+                .withDetail(DESCRIPTION_KEY, "Circuit breaker is disabled");
         } else {
             builder = Health.unknown()
-                .withDetail("state", state.toString());
+                .withDetail(STATE_KEY, state.toString());
         }
 
         builder
