@@ -21,6 +21,10 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AuditEventPersistenceAdapter {
 
+    private static final String EVENT_ID = "eventId";
+    private static final String AGGREGATE_ID = "aggregateId";
+
+
     private final AuditEventRepository auditEventRepository;
     private final KafkaTemplate<String, Map<String, Object>> kafkaTemplate;
     private final ObjectMapper objectMapper;
@@ -29,12 +33,12 @@ public class AuditEventPersistenceAdapter {
     @Retry(name = "audit-database")
     public void persistAuditEvent(Map<String, Object> event, String eventType) {
         log.debug("Persisting audit event: type={}, eventId={}",
-            eventType, event.get("eventId"));
+            eventType, event.get(EVENT_ID));
 
         AuditEventEntity entity = AuditEventEntity.builder()
-            .eventId(String.valueOf(event.getOrDefault("eventId", "")))
+            .eventId(String.valueOf(event.getOrDefault(EVENT_ID, "")))
             .eventType(eventType)
-            .aggregateId(String.valueOf(event.getOrDefault("aggregateId", "")))
+            .aggregateId(String.valueOf(event.getOrDefault(AGGREGATE_ID, "")))
             .correlationId(String.valueOf(event.getOrDefault("correlationId", "")))
             .userId(String.valueOf(event.getOrDefault("userId", "")))
             .sourceService(String.valueOf(event.getOrDefault("sourceService", "")))
@@ -51,7 +55,7 @@ public class AuditEventPersistenceAdapter {
         auditEventRepository.save(entity);
 
         log.info("Successfully persisted audit event: type={}, eventId={}",
-            eventType, event.get("eventId"));
+            eventType, event.get(EVENT_ID));
     }
 
     private void persistEventFallback(Map<String, Object> event, String eventType, Exception e) {
@@ -62,16 +66,16 @@ public class AuditEventPersistenceAdapter {
         try {
             Map<String, Object> pendingEvent = new HashMap<>(event);
             pendingEvent.put("eventType", eventType);
-            pendingEvent.put("originalEventId", event.get("eventId"));
+            pendingEvent.put("originalEventId", event.get(EVENT_ID));
             pendingEvent.put("timestamp", Instant.now().toString());
             pendingEvent.put("retryCount", 0);
             pendingEvent.put("reason", "Audit database unavailable");
 
             kafkaTemplate.send("audit-events-pending",
-                String.valueOf(event.get("aggregateId")),
+                String.valueOf(event.get(AGGREGATE_ID)),
                 pendingEvent);
 
-            log.info("Queued pending audit event for aggregateId={}", event.get("aggregateId"));
+            log.info("Queued pending audit event for aggregateId={}", event.get(AGGREGATE_ID));
 
         } catch (Exception kafkaError) {
             log.error("Failed to queue fallback audit event: {}", kafkaError.getMessage());
