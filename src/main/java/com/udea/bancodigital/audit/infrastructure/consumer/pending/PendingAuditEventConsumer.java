@@ -32,8 +32,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class PendingAuditEventConsumer {
 
-    private static final String EVENT_ID_KEY = EVENT_ID_KEY;
-    private static final String RETRY_COUNT_KEY = RETRY_COUNT_KEY;
+    private static final String EVENT_ID_KEY = "eventId";
+    private static final String RETRY_COUNT_KEY = "retryCount";
 
 
     private static final String PENDING_TOPIC = "audit-events-pending";
