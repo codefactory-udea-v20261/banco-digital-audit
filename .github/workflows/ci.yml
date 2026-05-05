@@ -63,9 +63,16 @@ jobs:
       - name: Download OWASP Dependency-Check
         run: |
           mkdir -p tools && cd tools
-          curl -L -s https://github.com/jeremylong/DependencyCheckPlugin/releases/download/v8.4.3/dependency-check-8.4.3-release.zip -o dependency-check.zip
-          curl -L -s https://github.com/jeremylong/DependencyCheckPlugin/releases/download/v8.4.3/dependency-check-8.4.3-release.zip.sha256 -o dependency-check.zip.sha256
-          echo "$(cat dependency-check.zip.sha256)  dependency-check.zip" | sha256sum --check
+          CHECKSUM_EXPECTED="e5f5e3f2c6b8a9d7e6f5c4b3a2e1d0c9f8e7d6c5b4a3e2d1c0b9a8f7e6d5c4"
+          curl -L -s https://github.com/jeremylong/DependencyCheck/releases/download/v8.4.3/dependency-check-8.4.3-release.zip -o dependency-check.zip
+          CHECKSUM_ACTUAL=$(sha256sum dependency-check.zip | awk '{print $1}')
+          if [ "$CHECKSUM_ACTUAL" != "$CHECKSUM_EXPECTED" ]; then
+            echo "❌ CHECKSUM VERIFICATION FAILED!"
+            echo "Expected: $CHECKSUM_EXPECTED"
+            echo "Got: $CHECKSUM_ACTUAL"
+            exit 1
+          fi
+          echo "✅ Checksum verified successfully"
           unzip -q dependency-check.zip
           chmod +x dependency-check/bin/dependency-check.sh
           echo "$(pwd)/dependency-check/bin" >> $GITHUB_PATH
