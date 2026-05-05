@@ -23,4 +23,6 @@ public interface AuditEventRepository extends JpaRepository<AuditEventEntity, St
     Page<AuditEventEntity> findByOccurredAtBetween(LocalDateTime start, LocalDateTime end, Pageable pageable);
 
     boolean existsByEventId(String eventId);
+
+    Optional<AuditEventEntity> findTopByOrderByCreatedAtDesc();
 }

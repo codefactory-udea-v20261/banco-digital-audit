@@ -11,10 +11,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -24,16 +27,49 @@ public class AuditEventPersistenceAdapter {
     private static final String EVENT_ID = "eventId";
     private static final String AGGREGATE_ID = "aggregateId";
 
-
     private final AuditEventRepository auditEventRepository;
     private final KafkaTemplate<String, Map<String, Object>> kafkaTemplate;
     private final ObjectMapper objectMapper;
+
+    private String generateHash(String data) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] encodedhash = digest.digest(data.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder(2 * encodedhash.length);
+            for (byte b : encodedhash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("Error calculating hash", e);
+        }
+    }
 
     @CircuitBreaker(name = "audit-database", fallbackMethod = "persistEventFallback")
     @Retry(name = "audit-database")
     public void persistAuditEvent(Map<String, Object> event, String eventType) {
         log.debug("Persisting audit event: type={}, eventId={}",
             eventType, event.get(EVENT_ID));
+
+        String payloadStr = "";
+        try {
+            payloadStr = objectMapper.writeValueAsString(event);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to serialize event payload: {}", e.getMessage());
+        }
+
+        // Get previous hash for chaining
+        String previousHash = null;
+        Optional<AuditEventEntity> lastEvent = auditEventRepository.findTopByOrderByCreatedAtDesc();
+        if (lastEvent.isPresent()) {
+            previousHash = lastEvent.get().getCurrentHash();
+        }
+
+        String currentHash = generateHash((previousHash != null ? previousHash : "") + payloadStr);
 
         AuditEventEntity entity = AuditEventEntity.builder()
             .eventId(String.valueOf(event.getOrDefault(EVENT_ID, "")))
@@ -44,13 +80,10 @@ public class AuditEventPersistenceAdapter {
             .sourceService(String.valueOf(event.getOrDefault("sourceService", "")))
             .occurredAt(LocalDateTime.now())
             .createdAt(LocalDateTime.now())
+            .payload(payloadStr)
+            .previousHash(previousHash)
+            .currentHash(currentHash)
             .build();
-
-        try {
-            entity.setPayload(objectMapper.writeValueAsString(event));
-        } catch (JsonProcessingException e) {
-            log.warn("Failed to serialize event payload: {}", e.getMessage());
-        }
 
         auditEventRepository.save(entity);
 
@@ -58,7 +91,7 @@ public class AuditEventPersistenceAdapter {
             eventType, event.get(EVENT_ID));
     }
 
-    private void persistEventFallback(Map<String, Object> event, String eventType, Exception e) {
+    public void persistEventFallback(Map<String, Object> event, String eventType, Exception e) {
         log.warn("Audit database unavailable (circuit breaker OPEN). "
             + "Queueing event for async persistence. Type={}, Error: {}",
             eventType, e.getMessage());

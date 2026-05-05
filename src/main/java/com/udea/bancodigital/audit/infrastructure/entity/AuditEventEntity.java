@@ -57,6 +57,12 @@ public class AuditEventEntity {
     @Column(name = "payload", columnDefinition = "JSON")
     private String payload;
 
+    @Column(name = "previous_hash", length = 64)
+    private String previousHash;
+
+    @Column(name = "current_hash", nullable = false, length = 64)
+    private String currentHash;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 }

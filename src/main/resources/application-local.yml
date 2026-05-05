@@ -3,7 +3,7 @@ spring:
     # Local development - Audit user
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:banco_digital_audit}
     username: audit_user
-    password: ${AUDIT_DB_PASSWORD:AuditService789!}
+    password: ${AUDIT_DB_PASSWORD:changemeinlocalenv}
   cloud:
     vault:
       enabled: false
@@ -15,10 +15,7 @@ spring.kafka:
   consumer:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
 
-eureka:
-  client:
-    serviceUrl:
-      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+
 
 logging:
   level:
