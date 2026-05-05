@@ -28,11 +28,6 @@ spring.kafka:
   listener:
     auto-startup: false
 
-spring.cloud.stream:
-  kafka:
-    binder:
-      auto-startup: false
-
 # Disable tracing in Cloud Run
 management:
   tracing:

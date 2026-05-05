@@ -15,11 +15,6 @@ spring.kafka:
   consumer:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
 
-spring.cloud.stream:
-  kafka:
-    binder:
-      brokers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
-
 eureka:
   client:
     serviceUrl:
