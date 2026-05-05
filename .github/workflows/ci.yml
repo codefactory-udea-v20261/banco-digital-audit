@@ -63,7 +63,7 @@ jobs:
       - name: Download OWASP Dependency-Check
         run: |
           mkdir -p tools && cd tools
-          CHECKSUM_EXPECTED="e5f5e3f2c6b8a9d7e6f5c4b3a2e1d0c9f8e7d6c5b4a3e2d1c0b9a8f7e6d5c4"
+          CHECKSUM_EXPECTED="fac257d4e52be689685d1538cab8f02321adf1ff263f814228a12157b76bea3b"
           curl -L -s https://github.com/jeremylong/DependencyCheck/releases/download/v8.4.3/dependency-check-8.4.3-release.zip -o dependency-check.zip
           CHECKSUM_ACTUAL=$(sha256sum dependency-check.zip | awk '{print $1}')
           if [ "$CHECKSUM_ACTUAL" != "$CHECKSUM_EXPECTED" ]; then
