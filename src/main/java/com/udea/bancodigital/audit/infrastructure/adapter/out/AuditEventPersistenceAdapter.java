@@ -55,7 +55,7 @@ public class AuditEventPersistenceAdapter {
         log.debug("Persisting audit event: type={}, eventId={}",
             eventType, event.get(EVENT_ID));
 
-        String payloadStr = "";
+        String payloadStr = null;
         try {
             payloadStr = objectMapper.writeValueAsString(event);
         } catch (JsonProcessingException e) {

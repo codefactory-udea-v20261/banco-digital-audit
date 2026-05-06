@@ -120,12 +120,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image
-        run: docker build -t Banco Digital - audit:${{ github.sha }} .
+        run: docker build -t banco-digital-audit:${{ github.sha }} .
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: Banco Digital - audit:${{ github.sha }}
+          image-ref: banco-digital-audit:${{ github.sha }}
           format: 'sarif'
           output: 'trivy-results.sarif'
 
