@@ -115,9 +115,6 @@
       <artifactId>micrometer-registry-prometheus</artifactId>
     </dependency>
 
-    <!-- ── Service Discovery (Eureka) ────────── -->
-
-
     <!-- ── Kafka & Messaging ─────────────────── -->
     <dependency>
       <groupId>org.springframework.kafka</groupId>
