@@ -115,12 +115,6 @@
       <artifactId>micrometer-registry-prometheus</artifactId>
     </dependency>
 
-    <!-- ── Service Discovery (Eureka) ────────── -->
-    <dependency>
-      <groupId>org.springframework.cloud</groupId>
-      <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
-    </dependency>
-
     <!-- ── Kafka & Messaging ─────────────────── -->
     <dependency>
       <groupId>org.springframework.kafka</groupId>
