@@ -18,6 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.junit.jupiter.api.BeforeEach;
+
 @ExtendWith(MockitoExtension.class)
 class EventConsumerTest {
 
@@ -27,8 +30,16 @@ class EventConsumerTest {
     @Mock
     private AuditEventPersistenceAdapter auditEventPersistenceAdapter;
 
+    @Mock
+    private JdbcTemplate jdbcTemplate;
+
     @Captor
     private ArgumentCaptor<Map<String, Object>> mapCaptor;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), anyString())).thenReturn(0);
+    }
 
     @Test
     @DisplayName("Should process CustomerCreated event correctly")

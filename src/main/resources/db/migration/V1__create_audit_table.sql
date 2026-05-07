@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS audit_event (
     source_service  VARCHAR(100),
     occurred_at     TIMESTAMP NOT NULL,
     payload         TEXT,
+    previous_hash   VARCHAR(64),
+    current_hash    VARCHAR(64) NOT NULL,
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 

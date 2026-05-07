@@ -4,6 +4,7 @@ import com.udea.bancodigital.audit.infrastructure.adapter.out.AuditEventPersiste
 import com.udea.bancodigital.shared.event.DomainEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
@@ -29,6 +30,7 @@ public class EventConsumer {
     private static final String CONSUMER_GROUP = "audit-service";
 
     private final AuditEventPersistenceAdapter auditEventPersistenceAdapter;
+    private final JdbcTemplate jdbcTemplate;
 
     /**
      * Consumes events from the main event bus and processes them with resilience.
@@ -52,13 +54,31 @@ public class EventConsumer {
                     partition,
                     offset);
 
+            // Check Idempotency
+            if (isEventProcessed(event.getEventId())) {
+                log.info("Event {} already processed in Audit, skipping.", event.getEventId());
+                return;
+            }
+
             processEvent(event);
+            markEventAsProcessed(event.getEventId(), event.getEventType());
 
             log.debug("Successfully processed event: {}", event.getEventId());
         } catch (Exception e) {
             log.error("Failed to process event {}: {}", event.getEventId(), e.getMessage(), e);
             // Resilience4j circuit breaker handles fallback via Kafka queueing
         }
+    }
+
+    private boolean isEventProcessed(String eventId) {
+        String sql = "SELECT COUNT(*) FROM processed_events WHERE event_id = ?";
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, eventId);
+        return count != null && count > 0;
+    }
+
+    private void markEventAsProcessed(String eventId, String eventType) {
+        String sql = "INSERT INTO processed_events (event_id, event_type) VALUES (?, ?) ON CONFLICT DO NOTHING";
+        jdbcTemplate.update(sql, eventId, eventType);
     }
 
     /**

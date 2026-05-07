@@ -24,12 +24,12 @@ COPY --from=builder /workspace/app/${JAR_FILE} app.jar
 
 RUN chown appuser:appgroup app.jar
 
-EXPOSE 8082
+EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8082/actuator/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8080}/actuator/health || exit 1
 
 USER appuser
 
-ENTRYPOINT [ "sh", "-c", "java -XX:+UnlockExperimentalVMOptions -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Dspring.profiles.active=${APP_PROFILE} -jar app.jar" ]
+ENTRYPOINT [ "sh", "-c", "java -XX:+UnlockExperimentalVMOptions -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:-prod} -jar app.jar" ]
