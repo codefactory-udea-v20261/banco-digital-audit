@@ -1,4 +1,4 @@
-name: Deploy Audit to Cloud Run
+name: Deploy audit to GKE
 
 on:
   push:
@@ -6,131 +6,88 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  id-token: write
-
-concurrency:
-  group: deploy-Audit
-  cancel-in-progress: false
+  contents: read       # checkout
+  id-token: write      # Workload Identity OIDC token
 
 env:
-  SERVICE_NAME: banco-digital-audit
-  IMAGE_NAME: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/microservices-repo/banco-digital-audit
+  PROJECT_ID:         project-2183efe1-b87d-4c12-966
+  REGION:             us-central1
+  GAR_REPO:           banco-digital-repo
+  IMAGE_PACKAGE:      banco-digital-audit
+  GKE_CLUSTER:        banco-digital-cluster
+  GKE_LOCATION:       us-central1
+  NAMESPACE:          banco-digital
+  K8S_DEPLOYMENT:     audit
+  ORCHESTRATION_REPO: codefactory-udea-v20261/banco-digital-orchestration
+  ORCHESTRATION_REF:  main
+
+concurrency:
+  group: deploy-audit
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    name: Build, push, rollout
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
 
     steps:
-      - name: Checkout code
+      - name: Checkout banco-digital-audit
         uses: actions/checkout@v4
 
-      - name: Validate Required Secrets
-        env:
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          GCP_REGION: ${{ secrets.GCP_REGION }}
-          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
-        run: |
-          required=(
-            GCP_PROJECT_ID
-            GCP_REGION
-            GCP_WORKLOAD_IDENTITY_PROVIDER
-            GCP_SERVICE_ACCOUNT
-            ENCRYPTION_KEY
-          )
-          for name in "${required[@]}"; do
-            if [ -z "${!name}" ]; then
-              echo "❌ Missing secret: $name"
-              exit 1
-            fi
-          done
-          echo "✅ All required secrets present"
+      - name: Checkout orchestration (k8s/deployments/audit.yaml)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.ORCHESTRATION_REPO }}
+          ref:        ${{ env.ORCHESTRATION_REF }}
+          path:       orchestration
 
-      - name: Authenticate to Google Cloud (Workload Identity)
+      - name: Authenticate to Google Cloud (Workload Identity, no SA keys)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          service_account:            ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Set up Cloud SDK
+      - name: Set up Cloud SDK + gke-gcloud-auth-plugin
         uses: google-github-actions/setup-gcloud@v2
         with:
           install_components: 'gke-gcloud-auth-plugin'
 
-      - name: Configure Docker authentication
-        run: |
-          gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: temurin
-          cache: maven
-
-      - name: Build with Maven
-        run: mvn -B clean package -DskipTests
+      - name: Build and push Docker image (tag = $GITHUB_SHA, never :latest)
         env:
-          SPRING_PROFILES_ACTIVE: prod
-
-      - name: Build Docker image
+          IMAGE_BASE: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/${{ env.IMAGE_PACKAGE }}
         run: |
-          docker build \
-            -t ${{ env.IMAGE_NAME }}:latest \
-            -t ${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            .
+          docker build -t "$IMAGE_BASE:$GITHUB_SHA" .
+          docker push "$IMAGE_BASE:$GITHUB_SHA"
+          echo "Pushed: $IMAGE_BASE:$GITHUB_SHA"
 
-      - name: Push Docker image to Artifact Registry
-        run: |
-          docker push ${{ env.IMAGE_NAME }}:latest
-          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          echo "✅ Image pushed to Artifact Registry"
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location:     ${{ env.GKE_LOCATION }}
 
-      - name: Deploy to Cloud Run
+      - name: Bump audit Deployment image to $GITHUB_SHA and apply
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/${{ env.IMAGE_PACKAGE }}:${{ github.sha }}
         run: |
-          gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image ${{ env.IMAGE_NAME }}:latest \
-            --platform managed \
-            --region ${{ env.GCP_REGION }} \
-            --service-account microservices-runtime@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
-            --memory 512Mi \
-            --cpu 1 \
-            --timeout 600 \
-            --set-env-vars SPRING_PROFILES_ACTIVE=prod,ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}
+          set -euo pipefail
+          MANIFEST=orchestration/k8s/deployments/audit.yaml
+          sed -i "s|image: .*${IMAGE_PACKAGE}:.*|image: $IMAGE|" "$MANIFEST"
+          grep -q "$IMAGE" "$MANIFEST" || {
+            echo "ERROR: sed pattern did not match in $MANIFEST."
+            exit 1
+          }
+          # Per-service deploy: only the audit Deployment is reapplied.
+          # Cluster bootstrap (Namespace, Secrets, ConfigMaps, RBAC,
+          # StatefulSets) is k8s/apply.sh's job in the orchestration repo.
+          kubectl apply -f "$MANIFEST"
 
-      - name: Verify Deployment
+      - name: Wait for rollout
         run: |
-          echo "⏳ Waiting for service to be ready..."
-          sleep 30
-          
-          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
-            --platform managed \
-            --region ${{ env.GCP_REGION }} \
-            --format='value(status.url)')
-          
-          echo "✅ Service deployed to: $SERVICE_URL"
-          
-          # Health check
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $SERVICE_URL/actuator/health)
-          echo "Health check: HTTP $HTTP_CODE"
-          
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "✅ Service is healthy"
-          else
-            echo "⚠️  Service returned HTTP $HTTP_CODE"
-          fi
-
-      - name: Deployment Summary
-        if: always()
-        run: |
-          echo "════════════════════════════════════════"
-          echo "🚀 Deployment Summary"
-          echo "════════════════════════════════════════"
-          echo "Service: ${{ env.SERVICE_NAME }}"
-          echo "Image: ${{ env.IMAGE_NAME }}:latest"
-          echo "Region: ${{ env.GCP_REGION }}"
-          echo "Commit: ${{ github.sha }}"
-          echo "════════════════════════════════════════"
+          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} \
+            --namespace ${{ env.NAMESPACE }} \
+            --timeout=300s
